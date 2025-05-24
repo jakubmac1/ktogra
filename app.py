@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+from flask import Flask, jsonify
+
 
 # Ligi i drużyny podhalańskie
 LIGI = {
@@ -119,10 +121,12 @@ for nazwa_ligi, dane in LIGI.items():
             if mecz_str not in wszystkie_mecze:
                 wszystkie_mecze.append(mecz_str)
 
-# ✅ Wynik
-print("\n Mecze podhalańskich drużyn w bieżącym tygodniu:\n")
-if wszystkie_mecze:
-    for mecz in wszystkie_mecze:
-        print("•", mecz)
-else:
-    print("Brak meczów.")
+# Wynik
+app = Flask(__name__)
+
+@app.route('/api/mecze', methods=['GET'])
+def get_mecze():
+    return jsonify({"mecze": wszystkie_mecze})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
