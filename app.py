@@ -1,44 +1,128 @@
-# app.py
-from flask import Flask, jsonify
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
-import os
 
-app = Flask(__name__)
+# Ligi i drużyny podhalańskie
+LIGI = {
+    "III Liga (gr. IV)": {
+        "url": "http://www.90minut.pl/liga/1/liga13559.html",
+        "filtruj": True,
+        "druzyny": ["Podhale Nowy Targ"]
+    },
+    "IV Liga Małopolska": {
+        "url": "http://www.90minut.pl/liga/1/liga13624.html",
+        "filtruj": True,
+        "druzyny": ["Watra Białka Tatrzańska", "Lubań Maniowy"]
+    },
+    "V Liga Małopolska Wschód": {
+        "url": "http://www.90minut.pl/liga/1/liga13789.html",
+        "filtruj": True,
+        "druzyny": ["LKS Szaflary", "Jordan Jordanów"]
+    },
+    "Klasa Okręgowa (Limanowa - Podhale)": {
+        "url": "http://www.90minut.pl/liga/1/liga13666.html",
+        "filtruj": True,
+        "druzyny": [
+            "Wisła Czarny Dunajec", "Orawa Jabłonka", "Huragan Waksmund",
+            "Lubań Tylmanowa", "Orkan Raba Wyżna", "Zawrat Bukowina Tatrzańska",
+            "Babia Góra Lipnica Wielka", "Wierchy Rabka Zdrój", "Wiatr Ludźmierz"
+        ]
+    },
+    "A Klasa Podhale": {
+        "url": "http://www.90minut.pl/liga/1/liga13709.html",
+        "filtruj": False
+    },    
+    "B Klasa Podhale gr. 1": {
+        "url": "http://www.90minut.pl/liga/1/liga13924.html",
+        "filtruj": False
+    },
+    "B Klasa Podhale gr. 2": {
+        "url": "http://www.90minut.pl/liga/1/liga13925.html",
+        "filtruj": False
+    },    
 
-@app.route('/api/mecze')
-def mecze():
-    # Tydzień: poniedziałek - niedziela
-    today = datetime.today()
-    start_of_week = today - timedelta(days=today.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
+}
 
-    url = 'https://www.laczynaspilka.pl/rozgrywki?season=4be7b40c-84ff-4e5a-96e5-875d7f13483a&leagueGroup=e978c8e5-d903-4a89-b6b5-8d5da6c567ee&leagueId=337bb869-0b42-484f-8eca-0c8842a13ec9&subLeague=63d04023-727a-4c0c-a8c6-4154fe1104b7&enumType=ZpnAndLeagueAndPlay&group=780f4e03-5178-4538-9c0f-da491aee362c&voivodeship=143a5a9a-5aa8-4186-ac19-d39e1d198ddb&isAdvanceMode=false&genderType=Male'
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    res = requests.get(url, headers=headers)
-    soup = BeautifulSoup(res.text, 'html.parser')
+# Mapowanie nazw miesięcy na numery
+miesiace = {
+    "stycznia": 1, "lutego": 2, "marca": 3, "kwietnia": 4, "maja": 5, "czerwca": 6,
+    "lipca": 7, "sierpnia": 8, "września": 9, "października": 10, "listopada": 11, "grudnia": 12
+}
 
-    # Znajdź mecze — struktura może się zmienić, więc trzeba przetestować na żywo
-    matches = []
-    for div in soup.select('.match-group__match'):  # <- może wymagać dostosowania
-        try:
-            date_str = div.select_one('.match-group__match-date').text.strip()
-            date_obj = datetime.strptime(date_str, "%d.%m.%Y")
-            if start_of_week <= date_obj <= end_of_week:
-                home = div.select_one('.match-group__team--home').text.strip()
-                away = div.select_one('.match-group__team--away').text.strip()
-                matches.append({
-                    'data': date_obj.strftime('%Y-%m-%d'),
-                    'gospodarz': home,
-                    'gosc': away
-                })
-        except Exception:
-            continue
+# Tydzień: poniedziałek-niedziela
+today = datetime.today()
+start_week = today - timedelta(days=today.weekday())
+end_week = start_week + timedelta(days=6)
 
-    return jsonify(matches)
+# Lista meczów
+wszystkie_mecze = []
 
-if __name__ == '__main__':
-    
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+# Mapping PL dni tygodnia 
+dni_tygodnia = {
+    0: "Poniedziałek", 1: "Wtorek", 2: "Środa", 3: "Czwartek",
+    4: "Piątek", 5: "Sobota", 6: "Niedziela"
+}
+
+# Przetwarzanie
+for nazwa_ligi, dane in LIGI.items():
+    print(f"\n Przetwarzam: {nazwa_ligi}")
+    response = requests.get(dane["url"])
+    response.encoding = 'ISO-8859-2'
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cols = row.find_all("td")
+            if len(cols) < 3:
+                continue
+
+            # Domyślnie: szukamy daty w ostatniej kolumnie
+            data_text = cols[-1].get_text(strip=True)
+            data_attr = row.get("data-date")
+            data_meczu = None
+
+            # Próba parsowania z atrybutu HTML
+            if data_attr:
+                try:
+                    data_meczu = datetime.strptime(data_attr, "%Y-%m-%d")
+                except:
+                    pass
+
+            # Próba parsowania z tekstu
+            if not data_meczu:
+                for miesiac_txt, miesiac_num in miesiace.items():
+                    if miesiac_txt in data_text:
+                        try:
+                            dzien_str, godzina = data_text.split(',')
+                            dzien = int(dzien_str.strip().split()[0])
+                            godziny = list(map(int, godzina.strip().split(':')))
+                            data_meczu = datetime(today.year, miesiac_num, dzien, *godziny)
+                            break
+                        except:
+                            continue
+
+            if not data_meczu or not (start_week.date() <= data_meczu.date() <= end_week.date()):
+                continue
+
+            # Drużyny
+            gospodarz = cols[0].get_text(strip=True)
+            gosc = cols[2].get_text(strip=True)
+
+            # Filtruj, jeśli trzeba
+            if dane.get("filtruj"):
+                if not any(team in [gospodarz, gosc] for team in dane["druzyny"]):
+                    continue
+
+            # Dodaj do listy
+            dzien_tygodnia = dni_tygodnia[data_meczu.weekday()]
+            mecz_str = f"{nazwa_ligi}: {gospodarz} vs {gosc} – {dzien_tygodnia} – {data_meczu.strftime('%d.%m.%Y %H:%M')}"
+            if mecz_str not in wszystkie_mecze:
+                wszystkie_mecze.append(mecz_str)
+
+# ✅ Wynik
+print("\n Mecze podhalańskich drużyn w bieżącym tygodniu:\n")
+if wszystkie_mecze:
+    for mecz in wszystkie_mecze:
+        print("•", mecz)
+else:
+    print("Brak meczów.")
