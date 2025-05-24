@@ -17,7 +17,7 @@ LIGI = {
         "filtruj": True,
         "druzyny": ["Watra Białka Tatrzańska", "Lubań Maniowy"]
     },
-    "V Liga Małopolska Wschód": {
+    "V Liga Małopolska (wschód)": {
         "url": "http://www.90minut.pl/liga/1/liga13789.html",
         "filtruj": True,
         "druzyny": ["LKS Szaflary", "Jordan Jordanów"]
@@ -127,7 +127,35 @@ app = Flask(__name__)
 
 @app.route('/api/mecze', methods=['GET'])
 def get_mecze():
-    return jsonify({"mecze": wszystkie_mecze})
+    # Organize matches by league
+    matches_by_league = {}
+    
+    for match in wszystkie_mecze:
+        # Split the match string into components
+        parts = match.split(': ')
+        league = parts[0]
+        match_info = parts[1].split(' – ')
+        
+        # Extract teams (handling "vs" properly)
+        teams_part = match_info[0]
+        if ' vs ' in teams_part:
+            gospodarz, gosc = teams_part.split(' vs ')
+        else:
+            gospodarz, gosc = teams_part, ''
+        
+        # Create league entry if it doesn't exist
+        if league not in matches_by_league:
+            matches_by_league[league] = []
+        
+        # Add match to league
+        matches_by_league[league].append({
+            'gospodarz': gospodarz.strip(),
+            'gosc': gosc.strip(),
+            'dzien': match_info[1],
+            'data_czas': match_info[2]
+        })
+    
+    return jsonify(matches_by_league)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
